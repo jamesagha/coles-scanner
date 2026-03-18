@@ -60,7 +60,17 @@ def add_to_coles_cart(search_term: str) -> dict:
     result = {"success": False, "message": "", "product_added": None}
     with sync_playwright() as pw:
         # Launch headless Chromium (no visible window needed on the server)
-        browser = pw.chromium.launch(headless=True)
+        browser = pw.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-zygote",
+                "--single-process",
+            ]
+        )
         context = browser.new_context(
             viewport={"width": 1280, "height": 800},
             user_agent=(
