@@ -40,16 +40,20 @@
       font-size: 22px; letter-spacing: 3px;
       text-align: center; font-weight: 500;
     }
+
     .btn {
       display: block; width: 100%; padding: 15px;
       border: none; border-radius: 12px; font-size: 16px;
       font-weight: 600; cursor: pointer; margin-top: 10px;
-      -webkit-appearance: none;
+      -webkit-appearance: none; text-align: center;
     }
     .btn-red  { background: #e01a22; color: white; }
     .btn-dark { background: #1c1c1e; color: white; }
     .btn-gray { background: #e5e5ea; color: #1c1c1e; font-size: 14px; }
     .btn:active { opacity: 0.75; }
+
+    /* Hidden native camera input */
+    #camera-input { display: none; }
 
     .status {
       border-radius: 12px; padding: 14px 16px;
@@ -61,27 +65,25 @@
     .status.error   { background: #f8d7da; color: #721c24; }
     .status.loading { background: #fff3cd; color: #856404; }
 
-    /* Camera section */
-    #camera-card { display: none; }
-    #camera-card.show { display: block; }
+    /* Preview of captured photo */
+    #preview-card { display: none; }
+    #preview-card.show { display: block; }
+    #preview-img {
+      width: 100%; border-radius: 10px;
+      display: block; margin-bottom: 10px;
+    }
+    .preview-label {
+      font-size: 13px; color: #8e8e93;
+      text-align: center; margin-bottom: 8px;
+    }
 
-    .viewfinder {
-      position: relative; border-radius: 12px;
-      overflow: hidden; background: #000; margin-bottom: 10px;
+    /* Tips box */
+    .tips {
+      background: #f2f2f7; border-radius: 10px;
+      padding: 12px 14px; margin-top: 12px;
+      font-size: 13px; color: #636366; line-height: 1.6;
     }
-    #scanner-video {
-      width: 100%; display: block;
-      max-height: 280px; object-fit: cover;
-    }
-    /* Aim overlay drawn on canvas */
-    #aim-canvas {
-      position: absolute; top: 0; left: 0;
-      width: 100%; height: 100%; pointer-events: none;
-    }
-    .camera-hint {
-      text-align: center; font-size: 13px;
-      color: #8e8e93; margin-bottom: 10px;
-    }
+    .tips strong { color: #1c1c1e; display: block; margin-bottom: 4px; }
 
     /* History */
     .history-title {
@@ -117,48 +119,40 @@
   <p>Scan a barcode to add it to your cart</p>
 </div>
 
-<details id="settings-panel">
-  <summary>Server settings</summary>
-  <div class="card" style="margin-top:8px">
-    <div style="margin-bottom:12px">
-      <label>Server URL</label>
-      <input type="text" id="cfg-url" placeholder="https://yourapp.railway.app" autocapitalize="none" autocorrect="off">
-    </div>
-    <div style="margin-bottom:12px">
-      <label>API secret token</label>
-      <input type="password" id="cfg-token" placeholder="your-secret-token" autocapitalize="none" autocorrect="off">
-    </div>
-    <button class="btn btn-gray" onclick="saveConfig()">Save settings</button>
-  </div>
-</details>
+
 
 <div id="status" class="status"></div>
 
 <!-- Main scan card -->
 <div class="card">
-  <label for="barcode-input">Barcode</label>
+  <label for="barcode-input">Barcode number</label>
   <input
     type="text" id="barcode-input"
     inputmode="numeric" placeholder="Scan or type..."
     autocomplete="off" autocorrect="off"
     onkeydown="if(event.key==='Enter') sendBarcode()"
   >
-  <button class="btn btn-red" id="btn-camera" onclick="toggleCamera()">Use camera to scan</button>
+
+  <!-- This is the magic: a native iOS camera trigger -->
+  <input type="file" id="camera-input" accept="image/*" capture="environment">
+
+  <button class="btn btn-red" onclick="triggerCamera()">Take photo of barcode</button>
   <button class="btn btn-dark" onclick="sendBarcode()">Add to Coles cart</button>
-</div>
 
-<!-- Camera card -->
-<div class="card" id="camera-card">
-  <div class="viewfinder">
-    <video id="scanner-video" playsinline autoplay muted></video>
-    <canvas id="aim-canvas"></canvas>
+  <div class="tips">
+    <strong>Tips for a good scan</strong>
+    Lay the item flat · Good lighting · Fill the frame with the barcode · Keep steady
   </div>
-  <p class="camera-hint">Hold barcode steady inside the red box</p>
-  <button class="btn btn-gray" onclick="captureAndDecode()">Capture manually</button>
-  <button class="btn btn-gray" style="margin-top:6px" onclick="stopCamera()">Cancel</button>
 </div>
 
-<!-- Hidden canvas for frame decoding -->
+<!-- Photo preview + result -->
+<div class="card" id="preview-card">
+  <p class="preview-label">Captured image</p>
+  <img id="preview-img" src="" alt="Captured barcode">
+  <div id="decode-result" style="font-size:14px; text-align:center; color:#1c1c1e; font-weight:500;"></div>
+</div>
+
+<!-- Hidden canvas for decoding -->
 <canvas id="decode-canvas" style="display:none"></canvas>
 
 <!-- History -->
@@ -167,22 +161,16 @@
   <div id="history-list"></div>
 </div>
 
+<!-- ZXing wasm for image decoding -->
+<script src="https://cdn.jsdelivr.net/npm/zxing-wasm@1.2.9/dist/reader/zxing_reader.js"></script>
+
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
-let SERVER_URL = localStorage.getItem('cfg_url') || '';
-let API_TOKEN  = localStorage.getItem('cfg_token') || '';
+let SERVER_URL = "https://coles-scanner-production.up.railway.app";
+let API_TOKEN  = "scanner2024abc";
 document.getElementById('cfg-url').value   = SERVER_URL;
 document.getElementById('cfg-token').value = API_TOKEN;
-if (!SERVER_URL) document.getElementById('settings-panel').open = true;
 
-function saveConfig() {
-  SERVER_URL = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
-  API_TOKEN  = document.getElementById('cfg-token').value.trim();
-  localStorage.setItem('cfg_url', SERVER_URL);
-  localStorage.setItem('cfg_token', API_TOKEN);
-  document.getElementById('settings-panel').open = false;
-  showStatus('Settings saved.', 'success');
-}
 
 // ── Status ────────────────────────────────────────────────────────────────────
 function showStatus(msg, type) {
@@ -209,16 +197,13 @@ function addHistory(barcode, label, ok) {
   while (list.children.length > 10) list.removeChild(list.lastChild);
 }
 
-// ── Send barcode to server ────────────────────────────────────────────────────
+// ── Send barcode ──────────────────────────────────────────────────────────────
 async function sendBarcode(barcode) {
   const input = document.getElementById('barcode-input');
   const code  = (barcode || input.value).trim();
-  if (!code)       { showStatus('Scan or enter a barcode first.', 'error'); return; }
-  if (!SERVER_URL) { showStatus('Enter your server URL in settings.', 'error'); document.getElementById('settings-panel').open = true; return; }
-  if (!API_TOKEN)  { showStatus('Enter your API token in settings.', 'error'); document.getElementById('settings-panel').open = true; return; }
+  if (!code)       { showStatus('Scan or type a barcode first.', 'error'); return; }
 
   showStatus('Sending to Coles... this takes ~20 seconds', 'loading');
-  stopCamera();
 
   try {
     const resp = await fetch(SERVER_URL + '/scan', {
@@ -231,212 +216,103 @@ async function sendBarcode(barcode) {
       showStatus(data.message, 'success');
       addHistory(code, data.product_added, true);
       input.value = '';
+      document.getElementById('preview-card').classList.remove('show');
     } else {
       showStatus('Failed: ' + data.message, 'error');
       addHistory(code, null, false);
     }
   } catch (err) {
-    showStatus('Could not reach server. Check the URL in settings.', 'error');
+    showStatus('Could not reach server. Check that Railway is running.', 'error');
     addHistory(code, null, false);
   }
 }
 
-// ── Camera ────────────────────────────────────────────────────────────────────
-let videoStream   = null;
-let scanLoop      = null;
-let cameraOn      = false;
-let barcodeReader = null;
-
-// Dynamically load the BarcodeDetector polyfill (works on iOS Safari)
-async function loadBarcodeReader() {
-  // Use native BarcodeDetector if available (Android Chrome, some desktop)
-  if ('BarcodeDetector' in window) {
-    const formats = await BarcodeDetector.getSupportedFormats();
-    barcodeReader = new BarcodeDetector({ formats });
-    return 'native';
-  }
-  // Fallback: ZXing wasm via CDN (works on iOS Safari)
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/zxing-wasm@1.2.9/dist/reader/zxing_reader.js';
-    s.onload = () => resolve('zxing-wasm');
-    s.onerror = () => resolve('manual-only');
-    document.head.appendChild(s);
-  });
+// ── Camera: trigger native iOS camera via file input ─────────────────────────
+function triggerCamera() {
+  document.getElementById('camera-input').click();
 }
 
-async function toggleCamera() {
-  if (cameraOn) { stopCamera(); return; }
+document.getElementById('camera-input').addEventListener('change', async function() {
+  const file = this.files[0];
+  if (!file) return;
 
-  showStatus('Starting camera...', 'loading');
+  showStatus('Reading barcode from photo...', 'loading');
 
-  // Request camera
-  try {
-    videoStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width:  { ideal: 1920 },
-        height: { ideal: 1080 }
-      }
-    });
-  } catch (e) {
-    showStatus('Camera access denied. Go to Safari Settings → Camera → Allow.', 'error');
-    return;
-  }
+  // Show preview
+  const previewCard = document.getElementById('preview-card');
+  const previewImg  = document.getElementById('preview-img');
+  const imgURL = URL.createObjectURL(file);
+  previewImg.src = imgURL;
+  previewCard.classList.add('show');
+  document.getElementById('decode-result').textContent = '';
 
-  const video = document.getElementById('scanner-video');
-  video.srcObject = videoStream;
-  await video.play();
-
-  cameraOn = true;
-  document.getElementById('camera-card').classList.add('show');
-  document.getElementById('btn-camera').textContent = 'Stop camera';
-  drawAimBox();
-
-  // Load decoder
-  const mode = await loadBarcodeReader();
-
-  if (mode === 'native') {
-    hideStatus();
-    startNativeScanLoop(video);
-  } else if (mode === 'zxing-wasm') {
-    hideStatus();
-    startZxingWasmLoop(video);
-  } else {
-    showStatus('Auto-detect unavailable — use "Capture manually" button.', 'loading');
-  }
-}
-
-// Draw red aim box onto the overlay canvas
-function drawAimBox() {
-  const video  = document.getElementById('scanner-video');
-  const canvas = document.getElementById('aim-canvas');
-  function frame() {
-    if (!cameraOn) return;
-    canvas.width  = video.offsetWidth;
-    canvas.height = video.offsetHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const bw = canvas.width  * 0.75;
-    const bh = canvas.height * 0.35;
-    const bx = (canvas.width  - bw) / 2;
-    const by = (canvas.height - bh) / 2;
-    ctx.strokeStyle = 'rgba(224,26,34,0.85)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(bx, by, bw, bh);
-    // Corner accents
-    const c = 18;
-    ctx.lineWidth = 4;
-    [[bx,by],[bx+bw,by],[bx,by+bh],[bx+bw,by+bh]].forEach(([x,y], i) => {
-      ctx.beginPath();
-      ctx.moveTo(x + (i%2===0?c:-c), y);
-      ctx.lineTo(x, y);
-      ctx.lineTo(x, y + (i<2?c:-c));
-      ctx.stroke();
-    });
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-}
-
-// Native BarcodeDetector scan loop
-function startNativeScanLoop(video) {
-  scanLoop = setInterval(async () => {
-    if (!cameraOn || video.readyState < 2) return;
-    try {
-      const results = await barcodeReader.detect(video);
-      if (results.length > 0) {
-        const code = results[0].rawValue;
-        document.getElementById('barcode-input').value = code;
-        stopCamera();
-        sendBarcode(code);
-      }
-    } catch(e) {}
-  }, 300);
-}
-
-// ZXing-wasm scan loop
-function startZxingWasmLoop(video) {
+  // Draw image onto canvas for decoding
   const canvas = document.getElementById('decode-canvas');
   const ctx    = canvas.getContext('2d');
+  const img    = new Image();
 
-  scanLoop = setInterval(async () => {
-    if (!cameraOn || video.readyState < 2) return;
-    try {
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
-      const result = await ZXingWasm.readBarcodesFromImageFile(blob, { tryHarder: true });
-      if (result && result.length > 0 && result[0].text) {
-        const code = result[0].text;
-        document.getElementById('barcode-input').value = code;
-        stopCamera();
-        sendBarcode(code);
-      }
-    } catch(e) {}
-  }, 500);
-}
+  img.onload = async function() {
+    // Scale down if too large (helps decoder speed, iOS photos are huge)
+    const MAX = 1200;
+    let w = img.width, h = img.height;
+    if (w > MAX || h > MAX) {
+      const scale = MAX / Math.max(w, h);
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+    }
+    canvas.width = w;
+    canvas.height = h;
+    ctx.drawImage(img, 0, 0, w, h);
 
-// Manual capture — grabs frame and tries all decode methods
-async function captureAndDecode() {
-  const video  = document.getElementById('scanner-video');
-  const canvas = document.getElementById('decode-canvas');
-  const ctx    = canvas.getContext('2d');
-  canvas.width  = video.videoWidth;
-  canvas.height = video.videoHeight;
-  ctx.drawImage(video, 0, 0);
+    let decoded = null;
 
-  showStatus('Trying to read barcode...', 'loading');
+    // Method 1: Native BarcodeDetector (Android Chrome, Safari 17.4+)
+    if ('BarcodeDetector' in window) {
+      try {
+        const formats  = await BarcodeDetector.getSupportedFormats();
+        const detector = new BarcodeDetector({ formats });
+        const results  = await detector.detect(canvas);
+        if (results.length > 0) decoded = results[0].rawValue;
+      } catch(e) {}
+    }
 
-  // Try native BarcodeDetector
-  if ('BarcodeDetector' in window) {
-    try {
-      const formats = await BarcodeDetector.getSupportedFormats();
-      const detector = new BarcodeDetector({ formats });
-      const results  = await detector.detect(canvas);
-      if (results.length > 0) {
-        const code = results[0].rawValue;
-        document.getElementById('barcode-input').value = code;
-        stopCamera();
-        sendBarcode(code);
-        return;
-      }
-    } catch(e) {}
-  }
+    // Method 2: ZXing-wasm (works on older iOS Safari)
+    if (!decoded && typeof ZXingWasm !== 'undefined') {
+      try {
+        const blob   = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.95));
+        const result = await ZXingWasm.readBarcodesFromImageFile(blob, {
+          tryHarder: true,
+          formats: ['EAN13','EAN8','UPCA','UPCE','Code128','Code39','QRCode','DataMatrix']
+        });
+        if (result && result.length > 0 && result[0].text) {
+          decoded = result[0].text;
+        }
+      } catch(e) {}
+    }
 
-  // Try ZXing-wasm if loaded
-  if (typeof ZXingWasm !== 'undefined') {
-    try {
-      const blob   = await new Promise(r => canvas.toBlob(r, 'image/png'));
-      const result = await ZXingWasm.readBarcodesFromImageFile(blob, { tryHarder: true });
-      if (result && result.length > 0 && result[0].text) {
-        const code = result[0].text;
-        document.getElementById('barcode-input').value = code;
-        stopCamera();
-        sendBarcode(code);
-        return;
-      }
-    } catch(e) {}
-  }
+    if (decoded) {
+      document.getElementById('barcode-input').value = decoded;
+      document.getElementById('decode-result').textContent = 'Read: ' + decoded;
+      hideStatus();
+      // Auto-send after short pause so user can see what was read
+      setTimeout(() => sendBarcode(decoded), 800);
+    } else {
+      showStatus(
+        "Couldn't read the barcode from that photo. Try again with better lighting, " +
+        "or type the number printed under the barcode manually.",
+        'error'
+      );
+      document.getElementById('decode-result').textContent = 'Could not decode — type number manually below';
+    }
 
-  // Nothing worked — show the captured image and ask user to type
-  showStatus("Couldn't read barcode automatically. Check the number below the barcode and type it in manually.", 'error');
-}
+    URL.revokeObjectURL(imgURL);
+  };
 
-function stopCamera() {
-  if (scanLoop) { clearInterval(scanLoop); scanLoop = null; }
-  if (videoStream) {
-    videoStream.getTracks().forEach(t => t.stop());
-    videoStream = null;
-  }
-  const video = document.getElementById('scanner-video');
-  video.srcObject = null;
-  cameraOn = false;
-  document.getElementById('camera-card').classList.remove('show');
-  document.getElementById('btn-camera').textContent = 'Use camera to scan';
-  hideStatus();
-}
+  img.src = imgURL;
+
+  // Reset file input so the same barcode can be scanned again
+  this.value = '';
+});
 </script>
 </body>
 </html>
