@@ -9,19 +9,35 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
 
-# Install Chromium at startup if not already present
-def ensure_chromium():
-    result = subprocess.run(
+
+def ensure_browser_deps():
+    log.info("Installing system dependencies for Chromium...")
+    apt = subprocess.run(
+        ["apt-get", "install", "-y", "--no-install-recommends",
+         "libglib2.0-0", "libnss3", "libnspr4", "libdbus-1-3",
+         "libatk1.0-0", "libatk-bridge2.0-0", "libgio-2.0-dev",
+         "libexpat1", "libatspi2.0-0", "libx11-6", "libxcomposite1",
+         "libxdamage1", "libxext6", "libxfixes3", "libxrandr2",
+         "libgbm1", "libdrm2", "libxcb1", "libxkbcommon0", "libasound2"],
+        capture_output=True, text=True
+    )
+    if apt.returncode != 0:
+        log.error(f"apt-get failed: {apt.stderr[-500:]}")
+    else:
+        log.info("System deps installed.")
+
+    log.info("Installing Chromium via playwright...")
+    pw = subprocess.run(
         ["playwright", "install", "chromium"],
         capture_output=True, text=True
     )
-    log.info(f"Playwright install stdout: {result.stdout}")
-    if result.returncode != 0:
-        log.error(f"Playwright install failed: {result.stderr}")
+    if pw.returncode != 0:
+        log.error(f"playwright install failed: {pw.stderr[-500:]}")
     else:
-        log.info("Chromium ready.")
+        log.info("Chromium installed.")
 
-ensure_chromium()
+
+ensure_browser_deps()
 
 app = Flask(__name__)
 CORS(app)
