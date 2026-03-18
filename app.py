@@ -145,6 +145,20 @@ def scan():
     return jsonify(cart_result), (200 if cart_result["success"] else 500)
 
 
+
+@app.route("/test", methods=["POST"])
+def test():
+    data = request.get_json(silent=True) or {}
+    token_ok = data.get("token") == API_SECRET
+    return jsonify({
+        "request_received": True,
+        "token_valid": token_ok,
+        "barcode_received": data.get("barcode", "none"),
+        "coles_email_set": bool(COLES_EMAIL),
+        "coles_password_set": bool(COLES_PASSWORD),
+    }), 200
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"}), 200
