@@ -1,4 +1,5 @@
 import os
+import subprocess
 import logging
 import requests
 from flask import Flask, request, jsonify
@@ -7,6 +8,20 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
+
+# Install Chromium at startup if not already present
+def ensure_chromium():
+    result = subprocess.run(
+        ["playwright", "install", "chromium"],
+        capture_output=True, text=True
+    )
+    log.info(f"Playwright install stdout: {result.stdout}")
+    if result.returncode != 0:
+        log.error(f"Playwright install failed: {result.stderr}")
+    else:
+        log.info("Chromium ready.")
+
+ensure_chromium()
 
 app = Flask(__name__)
 CORS(app)
@@ -126,33 +141,35 @@ def add_to_coles_cart(search_term):
 
 @app.route("/scan", methods=["POST"])
 def scan():
-    data = request.get_json(silent=True) or {}
-    if data.get("token") != API_SECRET:
-        return jsonify({"success": False, "message": "Unauthorized"}), 401
+    try:
+        data = request.get_json(silent=True) or {}
+        if data.get("token") != API_SECRET:
+            return jsonify({"success": False, "message": "Unauthorized"}), 401
 
-    barcode = str(data.get("barcode", "")).strip()
-    if not barcode:
-        return jsonify({"success": False, "message": "No barcode provided"}), 400
+        barcode = str(data.get("barcode", "")).strip()
+        if not barcode:
+            return jsonify({"success": False, "message": "No barcode provided"}), 400
 
-    if not COLES_EMAIL or not COLES_PASSWORD:
-        return jsonify({"success": False, "message": "Coles credentials not set in Railway Variables"}), 500
+        if not COLES_EMAIL or not COLES_PASSWORD:
+            return jsonify({"success": False, "message": "Coles credentials not set in Railway Variables"}), 500
 
-    log.info(f"=== Scan request: barcode={barcode} ===")
-    product_name = lookup_product_name(barcode)
-    search_term  = product_name if product_name else barcode
-    cart_result  = add_to_coles_cart(search_term)
+        log.info(f"=== Scan request: barcode={barcode} ===")
+        product_name = lookup_product_name(barcode)
+        search_term  = product_name if product_name else barcode
+        cart_result  = add_to_coles_cart(search_term)
 
-    return jsonify(cart_result), (200 if cart_result["success"] else 500)
-
+        return jsonify(cart_result), (200 if cart_result["success"] else 500)
+    except Exception as e:
+        log.error(f"Unhandled exception in /scan: {e}", exc_info=True)
+        return jsonify({"success": False, "message": f"Server error: {str(e)}"}), 500
 
 
 @app.route("/test", methods=["POST"])
 def test():
     data = request.get_json(silent=True) or {}
-    token_ok = data.get("token") == API_SECRET
     return jsonify({
         "request_received": True,
-        "token_valid": token_ok,
+        "token_valid": data.get("token") == API_SECRET,
         "barcode_received": data.get("barcode", "none"),
         "coles_email_set": bool(COLES_EMAIL),
         "coles_password_set": bool(COLES_PASSWORD),
