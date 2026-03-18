@@ -2,283 +2,441 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Coles Scanner">
   <title>Coles Scanner</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f5f5f5;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      background: #f2f2f7;
       min-height: 100vh;
-      padding: 24px 16px;
+      padding: env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 24px);
     }
-    h1 { font-size: 22px; font-weight: 600; margin-bottom: 8px; color: #1a1a1a; }
-    .subtitle { font-size: 14px; color: #666; margin-bottom: 32px; }
+    .header { text-align: center; padding: 28px 0 20px; }
+    .header h1 { font-size: 24px; font-weight: 700; color: #1c1c1e; }
+    .header p  { font-size: 14px; color: #8e8e93; margin-top: 4px; }
 
     .card {
-      background: white;
-      border-radius: 16px;
-      padding: 24px;
-      width: 100%;
-      max-width: 400px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-      margin-bottom: 16px;
+      background: white; border-radius: 16px;
+      padding: 20px; margin-bottom: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
-    label { display: block; font-size: 13px; font-weight: 500; color: #444; margin-bottom: 6px; }
-    input[type="text"] {
-      width: 100%;
-      padding: 12px 14px;
-      border: 1.5px solid #ddd;
-      border-radius: 10px;
-      font-size: 18px;
-      letter-spacing: 2px;
-      outline: none;
-      transition: border-color 0.2s;
+    label {
+      display: block; font-size: 12px; font-weight: 600;
+      color: #8e8e93; text-transform: uppercase;
+      letter-spacing: 0.4px; margin-bottom: 8px;
     }
-    input[type="text"]:focus { border-color: #e01a22; }
+    input[type="text"], input[type="password"] {
+      width: 100%; padding: 12px 14px;
+      border: 1.5px solid #e5e5ea; border-radius: 10px;
+      font-size: 16px; outline: none; background: #fafafa;
+      color: #1c1c1e; -webkit-appearance: none;
+    }
+    input:focus { border-color: #e01a22; background: white; }
+    #barcode-input {
+      font-size: 22px; letter-spacing: 3px;
+      text-align: center; font-weight: 500;
+    }
+    .btn {
+      display: block; width: 100%; padding: 15px;
+      border: none; border-radius: 12px; font-size: 16px;
+      font-weight: 600; cursor: pointer; margin-top: 10px;
+      -webkit-appearance: none;
+    }
+    .btn-red  { background: #e01a22; color: white; }
+    .btn-dark { background: #1c1c1e; color: white; }
+    .btn-gray { background: #e5e5ea; color: #1c1c1e; font-size: 14px; }
+    .btn:active { opacity: 0.75; }
 
-    button {
-      width: 100%;
-      padding: 14px;
-      border: none;
-      border-radius: 10px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.2s;
-      margin-top: 12px;
+    .status {
+      border-radius: 12px; padding: 14px 16px;
+      font-size: 14px; font-weight: 500;
+      margin-bottom: 12px; display: none; line-height: 1.5;
     }
-    button:active { opacity: 0.8; }
-    #btn-scan-camera {
-      background: #e01a22;
-      color: white;
+    .status.show    { display: block; }
+    .status.success { background: #d4edda; color: #155724; }
+    .status.error   { background: #f8d7da; color: #721c24; }
+    .status.loading { background: #fff3cd; color: #856404; }
+
+    /* Camera section */
+    #camera-card { display: none; }
+    #camera-card.show { display: block; }
+
+    .viewfinder {
+      position: relative; border-radius: 12px;
+      overflow: hidden; background: #000; margin-bottom: 10px;
     }
-    #btn-send {
-      background: #1a1a1a;
-      color: white;
+    #scanner-video {
+      width: 100%; display: block;
+      max-height: 280px; object-fit: cover;
+    }
+    /* Aim overlay drawn on canvas */
+    #aim-canvas {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; pointer-events: none;
+    }
+    .camera-hint {
+      text-align: center; font-size: 13px;
+      color: #8e8e93; margin-bottom: 10px;
     }
 
-    .status-box {
-      width: 100%;
-      max-width: 400px;
-      padding: 14px 18px;
-      border-radius: 12px;
-      font-size: 14px;
-      display: none;
+    /* History */
+    .history-title {
+      font-size: 13px; font-weight: 600; color: #8e8e93;
+      text-transform: uppercase; letter-spacing: 0.4px;
+      margin-bottom: 8px; padding: 0 4px;
     }
-    .status-box.success { background: #d4edda; color: #155724; display: block; }
-    .status-box.error   { background: #f8d7da; color: #721c24; display: block; }
-    .status-box.loading { background: #fff3cd; color: #856404; display: block; }
-
-    .history {
-      width: 100%;
-      max-width: 400px;
-      margin-top: 8px;
-    }
-    .history h2 { font-size: 14px; font-weight: 600; color: #888; margin-bottom: 8px; }
     .history-item {
-      background: white;
-      border-radius: 10px;
-      padding: 10px 14px;
-      font-size: 13px;
-      margin-bottom: 6px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      color: #333;
+      background: white; border-radius: 10px;
+      padding: 12px 14px; display: flex; align-items: center;
+      gap: 10px; margin-bottom: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
-    .history-item .dot {
-      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-    }
-    .dot.ok  { background: #28a745; }
-    .dot.err { background: #dc3545; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .dot.ok  { background: #34c759; }
+    .dot.err { background: #ff3b30; }
+    .history-item .name { font-size: 14px; color: #1c1c1e; flex: 1; }
+    .history-item .code { font-size: 11px; color: #8e8e93; }
 
-    /* ─── Config panel ─── */
-    details { width: 100%; max-width: 400px; margin-bottom: 16px; }
-    summary { font-size: 13px; color: #888; cursor: pointer; padding: 4px 0; }
-    .config-card { background: white; border-radius: 12px; padding: 16px; margin-top: 8px; }
-    .config-card input {
-      width: 100%; padding: 8px 10px; border: 1.5px solid #ddd;
-      border-radius: 8px; font-size: 13px; margin-top: 4px; margin-bottom: 10px; outline: none;
+    details summary {
+      font-size: 13px; color: #8e8e93; cursor: pointer;
+      padding: 4px 0; list-style: none;
+      display: flex; align-items: center; gap: 6px;
     }
-    .config-card input:focus { border-color: #e01a22; }
-    .save-btn {
-      background: #f0f0f0; color: #333; font-size: 13px;
-      padding: 8px; margin-top: 0; border-radius: 8px;
-    }
+    details summary::-webkit-details-marker { display: none; }
+    details summary::before { content: '⚙'; font-size: 14px; }
   </style>
 </head>
 <body>
 
+<div class="header">
   <h1>Coles Scanner</h1>
-  <p class="subtitle">Scan an item to add it to your Coles cart</p>
+  <p>Scan a barcode to add it to your cart</p>
+</div>
 
-  <!-- Config (collapsed by default) -->
-  <details>
-    <summary>Server settings</summary>
-    <div class="config-card">
+<details id="settings-panel">
+  <summary>Server settings</summary>
+  <div class="card" style="margin-top:8px">
+    <div style="margin-bottom:12px">
       <label>Server URL</label>
-      <input type="text" id="cfg-url" placeholder="https://your-app.railway.app">
-      <label>API secret token</label>
-      <input type="text" id="cfg-token" placeholder="your-secret-token">
-      <button class="save-btn" onclick="saveConfig()">Save settings</button>
+      <input type="text" id="cfg-url" placeholder="https://yourapp.railway.app" autocapitalize="none" autocorrect="off">
     </div>
-  </details>
-
-  <!-- Main card -->
-  <div class="card">
-    <label for="barcode-input">Barcode number</label>
-    <input
-      type="text"
-      id="barcode-input"
-      inputmode="numeric"
-      placeholder="Scan or type barcode..."
-      autofocus
-      onkeydown="if(event.key==='Enter') sendBarcode()"
-    >
-    <!--
-      The Bluetooth scanner acts like a keyboard — it types the barcode
-      number into the input above then sends Enter, so it triggers automatically.
-    -->
-    <button id="btn-scan-camera" onclick="scanWithCamera()">Use camera to scan</button>
-    <button id="btn-send" onclick="sendBarcode()">Add to Coles cart</button>
+    <div style="margin-bottom:12px">
+      <label>API secret token</label>
+      <input type="password" id="cfg-token" placeholder="your-secret-token" autocapitalize="none" autocorrect="off">
+    </div>
+    <button class="btn btn-gray" onclick="saveConfig()">Save settings</button>
   </div>
+</details>
 
-  <div id="status" class="status-box"></div>
+<div id="status" class="status"></div>
 
-  <!-- Scan history -->
-  <div class="history">
-    <h2>Recent scans</h2>
-    <div id="history-list"></div>
+<!-- Main scan card -->
+<div class="card">
+  <label for="barcode-input">Barcode</label>
+  <input
+    type="text" id="barcode-input"
+    inputmode="numeric" placeholder="Scan or type..."
+    autocomplete="off" autocorrect="off"
+    onkeydown="if(event.key==='Enter') sendBarcode()"
+  >
+  <button class="btn btn-red" id="btn-camera" onclick="toggleCamera()">Use camera to scan</button>
+  <button class="btn btn-dark" onclick="sendBarcode()">Add to Coles cart</button>
+</div>
+
+<!-- Camera card -->
+<div class="card" id="camera-card">
+  <div class="viewfinder">
+    <video id="scanner-video" playsinline autoplay muted></video>
+    <canvas id="aim-canvas"></canvas>
   </div>
+  <p class="camera-hint">Hold barcode steady inside the red box</p>
+  <button class="btn btn-gray" onclick="captureAndDecode()">Capture manually</button>
+  <button class="btn btn-gray" style="margin-top:6px" onclick="stopCamera()">Cancel</button>
+</div>
 
-  <!-- ZXing barcode library for camera scanning -->
-  <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+<!-- Hidden canvas for frame decoding -->
+<canvas id="decode-canvas" style="display:none"></canvas>
 
-  <script>
-    // ── Load saved config ──────────────────────────────────────────────────────
-    // NOTE: using sessionStorage here just for the page session (no persistence needed
-    // for the server URL / token during a single shopping session).
-    // If you close and reopen, re-enter in the Settings panel.
-    let SERVER_URL = sessionStorage.getItem("cfg_url") || "";
-    let API_TOKEN  = sessionStorage.getItem("cfg_token") || "";
+<!-- History -->
+<div id="history-section" style="display:none; margin-top:4px">
+  <div class="history-title">Recent scans</div>
+  <div id="history-list"></div>
+</div>
 
-    function saveConfig() {
-      SERVER_URL = document.getElementById("cfg-url").value.trim().replace(/\/$/, "");
-      API_TOKEN  = document.getElementById("cfg-token").value.trim();
-      sessionStorage.setItem("cfg_url",   SERVER_URL);
-      sessionStorage.setItem("cfg_token", API_TOKEN);
-      showStatus("Settings saved for this session.", "success");
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+let SERVER_URL = localStorage.getItem('cfg_url') || '';
+let API_TOKEN  = localStorage.getItem('cfg_token') || '';
+document.getElementById('cfg-url').value   = SERVER_URL;
+document.getElementById('cfg-token').value = API_TOKEN;
+if (!SERVER_URL) document.getElementById('settings-panel').open = true;
+
+function saveConfig() {
+  SERVER_URL = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
+  API_TOKEN  = document.getElementById('cfg-token').value.trim();
+  localStorage.setItem('cfg_url', SERVER_URL);
+  localStorage.setItem('cfg_token', API_TOKEN);
+  document.getElementById('settings-panel').open = false;
+  showStatus('Settings saved.', 'success');
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status show ' + type;
+}
+function hideStatus() {
+  document.getElementById('status').className = 'status';
+}
+
+// ── History ───────────────────────────────────────────────────────────────────
+function addHistory(barcode, label, ok) {
+  document.getElementById('history-section').style.display = 'block';
+  const list = document.getElementById('history-list');
+  const item = document.createElement('div');
+  item.className = 'history-item';
+  item.innerHTML = `
+    <span class="dot ${ok ? 'ok' : 'err'}"></span>
+    <span class="name">${label || barcode}</span>
+    <span class="code">${barcode}</span>
+  `;
+  list.prepend(item);
+  while (list.children.length > 10) list.removeChild(list.lastChild);
+}
+
+// ── Send barcode to server ────────────────────────────────────────────────────
+async function sendBarcode(barcode) {
+  const input = document.getElementById('barcode-input');
+  const code  = (barcode || input.value).trim();
+  if (!code)       { showStatus('Scan or enter a barcode first.', 'error'); return; }
+  if (!SERVER_URL) { showStatus('Enter your server URL in settings.', 'error'); document.getElementById('settings-panel').open = true; return; }
+  if (!API_TOKEN)  { showStatus('Enter your API token in settings.', 'error'); document.getElementById('settings-panel').open = true; return; }
+
+  showStatus('Sending to Coles... this takes ~20 seconds', 'loading');
+  stopCamera();
+
+  try {
+    const resp = await fetch(SERVER_URL + '/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ barcode: code, token: API_TOKEN })
+    });
+    const data = await resp.json();
+    if (data.success) {
+      showStatus(data.message, 'success');
+      addHistory(code, data.product_added, true);
+      input.value = '';
+    } else {
+      showStatus('Failed: ' + data.message, 'error');
+      addHistory(code, null, false);
     }
+  } catch (err) {
+    showStatus('Could not reach server. Check the URL in settings.', 'error');
+    addHistory(code, null, false);
+  }
+}
 
-    // Pre-fill inputs if config already saved
-    document.getElementById("cfg-url").value   = SERVER_URL;
-    document.getElementById("cfg-token").value = API_TOKEN;
+// ── Camera ────────────────────────────────────────────────────────────────────
+let videoStream   = null;
+let scanLoop      = null;
+let cameraOn      = false;
+let barcodeReader = null;
 
-    // ── Status display ─────────────────────────────────────────────────────────
-    function showStatus(msg, type) {
-      const el = document.getElementById("status");
-      el.textContent = msg;
-      el.className = "status-box " + type;
-    }
+// Dynamically load the BarcodeDetector polyfill (works on iOS Safari)
+async function loadBarcodeReader() {
+  // Use native BarcodeDetector if available (Android Chrome, some desktop)
+  if ('BarcodeDetector' in window) {
+    const formats = await BarcodeDetector.getSupportedFormats();
+    barcodeReader = new BarcodeDetector({ formats });
+    return 'native';
+  }
+  // Fallback: ZXing wasm via CDN (works on iOS Safari)
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/zxing-wasm@1.2.9/dist/reader/zxing_reader.js';
+    s.onload = () => resolve('zxing-wasm');
+    s.onerror = () => resolve('manual-only');
+    document.head.appendChild(s);
+  });
+}
 
-    // ── History ────────────────────────────────────────────────────────────────
-    function addHistory(barcode, label, ok) {
-      const list = document.getElementById("history-list");
-      const item = document.createElement("div");
-      item.className = "history-item";
-      item.innerHTML = `
-        <span>${label || barcode}</span>
-        <span class="dot ${ok ? 'ok' : 'err'}"></span>
-      `;
-      list.prepend(item);
-      // Keep only last 10
-      while (list.children.length > 10) list.removeChild(list.lastChild);
-    }
+async function toggleCamera() {
+  if (cameraOn) { stopCamera(); return; }
 
-    // ── Send barcode to cloud server ───────────────────────────────────────────
-    async function sendBarcode(barcode) {
-      const input = document.getElementById("barcode-input");
-      const code  = (barcode || input.value).trim();
+  showStatus('Starting camera...', 'loading');
 
-      if (!code) { showStatus("Please scan or enter a barcode first.", "error"); return; }
-      if (!SERVER_URL) { showStatus("Enter your server URL in Settings first.", "error"); return; }
-      if (!API_TOKEN)  { showStatus("Enter your API token in Settings first.", "error"); return; }
-
-      showStatus("Sending to Coles... (this takes ~20 seconds)", "loading");
-
-      try {
-        const resp = await fetch(`${SERVER_URL}/scan`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ barcode: code, token: API_TOKEN })
-        });
-        const data = await resp.json();
-
-        if (data.success) {
-          showStatus(data.message, "success");
-          addHistory(code, data.product_added, true);
-          input.value = "";
-          input.focus();
-        } else {
-          showStatus("Failed: " + data.message, "error");
-          addHistory(code, null, false);
-        }
-      } catch (err) {
-        showStatus("Could not reach server: " + err.message, "error");
-        addHistory(code, null, false);
+  // Request camera
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1920 },
+        height: { ideal: 1080 }
       }
-    }
+    });
+  } catch (e) {
+    showStatus('Camera access denied. Go to Safari Settings → Camera → Allow.', 'error');
+    return;
+  }
 
-    // ── Camera scanning via ZXing ──────────────────────────────────────────────
-    let codeReader = null;
-    let scanning   = false;
+  const video = document.getElementById('scanner-video');
+  video.srcObject = videoStream;
+  await video.play();
 
-    async function scanWithCamera() {
-      if (scanning) {
+  cameraOn = true;
+  document.getElementById('camera-card').classList.add('show');
+  document.getElementById('btn-camera').textContent = 'Stop camera';
+  drawAimBox();
+
+  // Load decoder
+  const mode = await loadBarcodeReader();
+
+  if (mode === 'native') {
+    hideStatus();
+    startNativeScanLoop(video);
+  } else if (mode === 'zxing-wasm') {
+    hideStatus();
+    startZxingWasmLoop(video);
+  } else {
+    showStatus('Auto-detect unavailable — use "Capture manually" button.', 'loading');
+  }
+}
+
+// Draw red aim box onto the overlay canvas
+function drawAimBox() {
+  const video  = document.getElementById('scanner-video');
+  const canvas = document.getElementById('aim-canvas');
+  function frame() {
+    if (!cameraOn) return;
+    canvas.width  = video.offsetWidth;
+    canvas.height = video.offsetHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const bw = canvas.width  * 0.75;
+    const bh = canvas.height * 0.35;
+    const bx = (canvas.width  - bw) / 2;
+    const by = (canvas.height - bh) / 2;
+    ctx.strokeStyle = 'rgba(224,26,34,0.85)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, by, bw, bh);
+    // Corner accents
+    const c = 18;
+    ctx.lineWidth = 4;
+    [[bx,by],[bx+bw,by],[bx,by+bh],[bx+bw,by+bh]].forEach(([x,y], i) => {
+      ctx.beginPath();
+      ctx.moveTo(x + (i%2===0?c:-c), y);
+      ctx.lineTo(x, y);
+      ctx.lineTo(x, y + (i<2?c:-c));
+      ctx.stroke();
+    });
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+// Native BarcodeDetector scan loop
+function startNativeScanLoop(video) {
+  scanLoop = setInterval(async () => {
+    if (!cameraOn || video.readyState < 2) return;
+    try {
+      const results = await barcodeReader.detect(video);
+      if (results.length > 0) {
+        const code = results[0].rawValue;
+        document.getElementById('barcode-input').value = code;
         stopCamera();
+        sendBarcode(code);
+      }
+    } catch(e) {}
+  }, 300);
+}
+
+// ZXing-wasm scan loop
+function startZxingWasmLoop(video) {
+  const canvas = document.getElementById('decode-canvas');
+  const ctx    = canvas.getContext('2d');
+
+  scanLoop = setInterval(async () => {
+    if (!cameraOn || video.readyState < 2) return;
+    try {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+      const result = await ZXingWasm.readBarcodesFromImageFile(blob, { tryHarder: true });
+      if (result && result.length > 0 && result[0].text) {
+        const code = result[0].text;
+        document.getElementById('barcode-input').value = code;
+        stopCamera();
+        sendBarcode(code);
+      }
+    } catch(e) {}
+  }, 500);
+}
+
+// Manual capture — grabs frame and tries all decode methods
+async function captureAndDecode() {
+  const video  = document.getElementById('scanner-video');
+  const canvas = document.getElementById('decode-canvas');
+  const ctx    = canvas.getContext('2d');
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+
+  showStatus('Trying to read barcode...', 'loading');
+
+  // Try native BarcodeDetector
+  if ('BarcodeDetector' in window) {
+    try {
+      const formats = await BarcodeDetector.getSupportedFormats();
+      const detector = new BarcodeDetector({ formats });
+      const results  = await detector.detect(canvas);
+      if (results.length > 0) {
+        const code = results[0].rawValue;
+        document.getElementById('barcode-input').value = code;
+        stopCamera();
+        sendBarcode(code);
         return;
       }
+    } catch(e) {}
+  }
 
-      // Create a video element on the fly
-      let video = document.getElementById("scanner-video");
-      if (!video) {
-        video = document.createElement("video");
-        video.id = "scanner-video";
-        video.style.cssText = "width:100%;max-width:400px;border-radius:12px;margin:12px 0;";
-        document.getElementById("status").insertAdjacentElement("beforebegin", video);
-      }
-
-      document.getElementById("btn-scan-camera").textContent = "Stop camera";
-      scanning = true;
-      showStatus("Point camera at barcode...", "loading");
-
-      codeReader = new ZXing.BrowserMultiFormatReader();
-      try {
-        await codeReader.decodeFromVideoDevice(null, video, (result, err) => {
-          if (result) {
-            document.getElementById("barcode-input").value = result.text;
-            stopCamera();
-            sendBarcode(result.text);
-          }
-        });
-      } catch (e) {
-        showStatus("Camera error: " + e.message, "error");
+  // Try ZXing-wasm if loaded
+  if (typeof ZXingWasm !== 'undefined') {
+    try {
+      const blob   = await new Promise(r => canvas.toBlob(r, 'image/png'));
+      const result = await ZXingWasm.readBarcodesFromImageFile(blob, { tryHarder: true });
+      if (result && result.length > 0 && result[0].text) {
+        const code = result[0].text;
+        document.getElementById('barcode-input').value = code;
         stopCamera();
+        sendBarcode(code);
+        return;
       }
-    }
+    } catch(e) {}
+  }
 
-    function stopCamera() {
-      if (codeReader) { codeReader.reset(); codeReader = null; }
-      scanning = false;
-      document.getElementById("btn-scan-camera").textContent = "Use camera to scan";
-      const video = document.getElementById("scanner-video");
-      if (video) video.remove();
-    }
-  </script>
+  // Nothing worked — show the captured image and ask user to type
+  showStatus("Couldn't read barcode automatically. Check the number below the barcode and type it in manually.", 'error');
+}
 
+function stopCamera() {
+  if (scanLoop) { clearInterval(scanLoop); scanLoop = null; }
+  if (videoStream) {
+    videoStream.getTracks().forEach(t => t.stop());
+    videoStream = null;
+  }
+  const video = document.getElementById('scanner-video');
+  video.srcObject = null;
+  cameraOn = false;
+  document.getElementById('camera-card').classList.remove('show');
+  document.getElementById('btn-camera').textContent = 'Use camera to scan';
+  hideStatus();
+}
+</script>
 </body>
 </html>
