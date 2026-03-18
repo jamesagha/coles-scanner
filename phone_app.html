@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coles Scanner</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+    h1 { font-size: 22px; font-weight: 600; margin-bottom: 8px; color: #1a1a1a; }
+    .subtitle { font-size: 14px; color: #666; margin-bottom: 32px; }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 16px;
+    }
+    label { display: block; font-size: 13px; font-weight: 500; color: #444; margin-bottom: 6px; }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #ddd;
+      border-radius: 10px;
+      font-size: 18px;
+      letter-spacing: 2px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus { border-color: #e01a22; }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      margin-top: 12px;
+    }
+    button:active { opacity: 0.8; }
+    #btn-scan-camera {
+      background: #e01a22;
+      color: white;
+    }
+    #btn-send {
+      background: #1a1a1a;
+      color: white;
+    }
+
+    .status-box {
+      width: 100%;
+      max-width: 400px;
+      padding: 14px 18px;
+      border-radius: 12px;
+      font-size: 14px;
+      display: none;
+    }
+    .status-box.success { background: #d4edda; color: #155724; display: block; }
+    .status-box.error   { background: #f8d7da; color: #721c24; display: block; }
+    .status-box.loading { background: #fff3cd; color: #856404; display: block; }
+
+    .history {
+      width: 100%;
+      max-width: 400px;
+      margin-top: 8px;
+    }
+    .history h2 { font-size: 14px; font-weight: 600; color: #888; margin-bottom: 8px; }
+    .history-item {
+      background: white;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: #333;
+    }
+    .history-item .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .dot.ok  { background: #28a745; }
+    .dot.err { background: #dc3545; }
+
+    /* ─── Config panel ─── */
+    details { width: 100%; max-width: 400px; margin-bottom: 16px; }
+    summary { font-size: 13px; color: #888; cursor: pointer; padding: 4px 0; }
+    .config-card { background: white; border-radius: 12px; padding: 16px; margin-top: 8px; }
+    .config-card input {
+      width: 100%; padding: 8px 10px; border: 1.5px solid #ddd;
+      border-radius: 8px; font-size: 13px; margin-top: 4px; margin-bottom: 10px; outline: none;
+    }
+    .config-card input:focus { border-color: #e01a22; }
+    .save-btn {
+      background: #f0f0f0; color: #333; font-size: 13px;
+      padding: 8px; margin-top: 0; border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Coles Scanner</h1>
+  <p class="subtitle">Scan an item to add it to your Coles cart</p>
+
+  <!-- Config (collapsed by default) -->
+  <details>
+    <summary>Server settings</summary>
+    <div class="config-card">
+      <label>Server URL</label>
+      <input type="text" id="cfg-url" placeholder="https://your-app.railway.app">
+      <label>API secret token</label>
+      <input type="text" id="cfg-token" placeholder="your-secret-token">
+      <button class="save-btn" onclick="saveConfig()">Save settings</button>
+    </div>
+  </details>
+
+  <!-- Main card -->
+  <div class="card">
+    <label for="barcode-input">Barcode number</label>
+    <input
+      type="text"
+      id="barcode-input"
+      inputmode="numeric"
+      placeholder="Scan or type barcode..."
+      autofocus
+      onkeydown="if(event.key==='Enter') sendBarcode()"
+    >
+    <!--
+      The Bluetooth scanner acts like a keyboard — it types the barcode
+      number into the input above then sends Enter, so it triggers automatically.
+    -->
+    <button id="btn-scan-camera" onclick="scanWithCamera()">Use camera to scan</button>
+    <button id="btn-send" onclick="sendBarcode()">Add to Coles cart</button>
+  </div>
+
+  <div id="status" class="status-box"></div>
+
+  <!-- Scan history -->
+  <div class="history">
+    <h2>Recent scans</h2>
+    <div id="history-list"></div>
+  </div>
+
+  <!-- ZXing barcode library for camera scanning -->
+  <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+
+  <script>
+    // ── Load saved config ──────────────────────────────────────────────────────
+    // NOTE: using sessionStorage here just for the page session (no persistence needed
+    // for the server URL / token during a single shopping session).
+    // If you close and reopen, re-enter in the Settings panel.
+    let SERVER_URL = sessionStorage.getItem("cfg_url") || "";
+    let API_TOKEN  = sessionStorage.getItem("cfg_token") || "";
+
+    function saveConfig() {
+      SERVER_URL = document.getElementById("cfg-url").value.trim().replace(/\/$/, "");
+      API_TOKEN  = document.getElementById("cfg-token").value.trim();
+      sessionStorage.setItem("cfg_url",   SERVER_URL);
+      sessionStorage.setItem("cfg_token", API_TOKEN);
+      showStatus("Settings saved for this session.", "success");
+    }
+
+    // Pre-fill inputs if config already saved
+    document.getElementById("cfg-url").value   = SERVER_URL;
+    document.getElementById("cfg-token").value = API_TOKEN;
+
+    // ── Status display ─────────────────────────────────────────────────────────
+    function showStatus(msg, type) {
+      const el = document.getElementById("status");
+      el.textContent = msg;
+      el.className = "status-box " + type;
+    }
+
+    // ── History ────────────────────────────────────────────────────────────────
+    function addHistory(barcode, label, ok) {
+      const list = document.getElementById("history-list");
+      const item = document.createElement("div");
+      item.className = "history-item";
+      item.innerHTML = `
+        <span>${label || barcode}</span>
+        <span class="dot ${ok ? 'ok' : 'err'}"></span>
+      `;
+      list.prepend(item);
+      // Keep only last 10
+      while (list.children.length > 10) list.removeChild(list.lastChild);
+    }
+
+    // ── Send barcode to cloud server ───────────────────────────────────────────
+    async function sendBarcode(barcode) {
+      const input = document.getElementById("barcode-input");
+      const code  = (barcode || input.value).trim();
+
+      if (!code) { showStatus("Please scan or enter a barcode first.", "error"); return; }
+      if (!SERVER_URL) { showStatus("Enter your server URL in Settings first.", "error"); return; }
+      if (!API_TOKEN)  { showStatus("Enter your API token in Settings first.", "error"); return; }
+
+      showStatus("Sending to Coles... (this takes ~20 seconds)", "loading");
+
+      try {
+        const resp = await fetch(`${SERVER_URL}/scan`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ barcode: code, token: API_TOKEN })
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+          showStatus(data.message, "success");
+          addHistory(code, data.product_added, true);
+          input.value = "";
+          input.focus();
+        } else {
+          showStatus("Failed: " + data.message, "error");
+          addHistory(code, null, false);
+        }
+      } catch (err) {
+        showStatus("Could not reach server: " + err.message, "error");
+        addHistory(code, null, false);
+      }
+    }
+
+    // ── Camera scanning via ZXing ──────────────────────────────────────────────
+    let codeReader = null;
+    let scanning   = false;
+
+    async function scanWithCamera() {
+      if (scanning) {
+        stopCamera();
+        return;
+      }
+
+      // Create a video element on the fly
+      let video = document.getElementById("scanner-video");
+      if (!video) {
+        video = document.createElement("video");
+        video.id = "scanner-video";
+        video.style.cssText = "width:100%;max-width:400px;border-radius:12px;margin:12px 0;";
+        document.getElementById("status").insertAdjacentElement("beforebegin", video);
+      }
+
+      document.getElementById("btn-scan-camera").textContent = "Stop camera";
+      scanning = true;
+      showStatus("Point camera at barcode...", "loading");
+
+      codeReader = new ZXing.BrowserMultiFormatReader();
+      try {
+        await codeReader.decodeFromVideoDevice(null, video, (result, err) => {
+          if (result) {
+            document.getElementById("barcode-input").value = result.text;
+            stopCamera();
+            sendBarcode(result.text);
+          }
+        });
+      } catch (e) {
+        showStatus("Camera error: " + e.message, "error");
+        stopCamera();
+      }
+    }
+
+    function stopCamera() {
+      if (codeReader) { codeReader.reset(); codeReader = null; }
+      scanning = false;
+      document.getElementById("btn-scan-camera").textContent = "Use camera to scan";
+      const video = document.getElementById("scanner-video");
+      if (video) video.remove();
+    }
+  </script>
+
+</body>
+</html>
