@@ -252,8 +252,8 @@ document.getElementById('camera-input').addEventListener('change', async functio
   const img    = new Image();
 
   img.onload = async function() {
-    // Scale down if too large (helps decoder speed, iOS photos are huge)
-    const MAX = 1200;
+    // Draw onto canvas and send to server for decoding
+    const MAX = 1600;
     let w = img.width, h = img.height;
     if (w > MAX || h > MAX) {
       const scale = MAX / Math.max(w, h);
@@ -264,45 +264,31 @@ document.getElementById('camera-input').addEventListener('change', async functio
     canvas.height = h;
     ctx.drawImage(img, 0, 0, w, h);
 
-    let decoded = null;
+    // Convert to base64 and send to server
+    const base64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
 
-    // Method 1: Native BarcodeDetector (Android Chrome, Safari 17.4+)
-    if ('BarcodeDetector' in window) {
-      try {
-        const formats  = await BarcodeDetector.getSupportedFormats();
-        const detector = new BarcodeDetector({ formats });
-        const results  = await detector.detect(canvas);
-        if (results.length > 0) decoded = results[0].rawValue;
-      } catch(e) {}
-    }
+    showStatus('Sending photo to server for barcode reading...', 'loading');
 
-    // Method 2: ZXing-wasm (works on older iOS Safari)
-    if (!decoded && typeof ZXingWasm !== 'undefined') {
-      try {
-        const blob   = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.95));
-        const result = await ZXingWasm.readBarcodesFromImageFile(blob, {
-          tryHarder: true,
-          formats: ['EAN13','EAN8','UPCA','UPCE','Code128','Code39','QRCode','DataMatrix']
-        });
-        if (result && result.length > 0 && result[0].text) {
-          decoded = result[0].text;
-        }
-      } catch(e) {}
-    }
+    try {
+      const resp = await fetch(SERVER_URL + '/decode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64, token: API_TOKEN })
+      });
+      const data = await resp.json();
 
-    if (decoded) {
-      document.getElementById('barcode-input').value = decoded;
-      document.getElementById('decode-result').textContent = 'Read: ' + decoded;
-      hideStatus();
-      // Auto-send after short pause so user can see what was read
-      setTimeout(() => sendBarcode(decoded), 800);
-    } else {
-      showStatus(
-        "Couldn't read the barcode from that photo. Try again with better lighting, " +
-        "or type the number printed under the barcode manually.",
-        'error'
-      );
-      document.getElementById('decode-result').textContent = 'Could not decode — type number manually below';
+      if (data.success && data.barcode) {
+        document.getElementById('barcode-input').value = data.barcode;
+        document.getElementById('decode-result').textContent = 'Read: ' + (data.product || data.barcode);
+        showStatus(data.message, 'success');
+        addHistory(data.barcode, data.product, true);
+        document.getElementById('preview-card').classList.remove('show');
+      } else {
+        showStatus(data.message || "Could not find a barcode — try better lighting or type the number manually.", 'error');
+        document.getElementById('decode-result').textContent = 'Could not decode — type number manually below';
+      }
+    } catch(e) {
+      showStatus('Could not reach server. Check that Railway is running.', 'error');
     }
 
     URL.revokeObjectURL(imgURL);
