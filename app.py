@@ -79,6 +79,7 @@ def lookup_product_name(barcode):
 def decode_barcode_from_image(image_b64):
     """Send image to Google Cloud Vision API to detect barcode."""
     try:
+        log.info(f"Using Vision key: '{GOOGLE_VISION_KEY[:8]}...{GOOGLE_VISION_KEY[-4:]}' (length {len(GOOGLE_VISION_KEY)})")
         url  = f"https://vision.googleapis.com/v1/images:annotate?key={GOOGLE_VISION_KEY}"
         body = {
             "requests": [{
@@ -88,9 +89,23 @@ def decode_barcode_from_image(image_b64):
         }
         resp   = requests.post(url, json=body, timeout=15)
         result = resp.json()
+        log.info(f"Vision API status: {resp.status_code}")
         log.info(f"Vision API raw response: {result}")
 
-        barcodes = result.get("responses", [{}])[0].get("barcodeAnnotations", [])
+        # Check for API-level errors
+        if "error" in result:
+            log.error(f"Vision API error: {result['error']}")
+            return None
+
+        response0 = result.get("responses", [{}])[0]
+
+        # Check for response-level errors
+        if "error" in response0:
+            log.error(f"Vision response error: {response0['error']}")
+            return None
+
+        barcodes = response0.get("barcodeAnnotations", [])
+        log.info(f"Barcodes found: {len(barcodes)}")
         if barcodes:
             value = barcodes[0].get("rawValue", "")
             if value:
