@@ -12,9 +12,9 @@ app = Flask(__name__)
 CORS(app)
 
 API_SECRET        = os.environ.get("API_SECRET", "change-me-please")
-TELEGRAM_TOKEN    = "8756679947:AAGG1k89Cdoxj1vOW69GHR0iwx6W-VbiGzY"
-TELEGRAM_CHAT_ID  = "8655784613"
-GOOGLE_VISION_KEY = "AIzaSyDDZtXxtC5fGJMvdZN9GKNE-GXPz8r_vJc"
+TELEGRAM_TOKEN    = os.environ.get("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID  = os.environ.get("TELEGRAM_CHAT_ID", "")
+GOOGLE_VISION_KEY = os.environ.get("GOOGLE_VISION_KEY", "")
 
 
 def send_telegram(message):
