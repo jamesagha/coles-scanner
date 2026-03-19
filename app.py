@@ -80,11 +80,15 @@ def decode_barcode_from_image(image_b64):
     """Send image to Google Cloud Vision API to detect barcode."""
     try:
         log.info(f"Using Vision key: '{GOOGLE_VISION_KEY[:8]}...{GOOGLE_VISION_KEY[-4:]}' (length {len(GOOGLE_VISION_KEY)})")
+        log.info(f"Image base64 length: {len(image_b64)} chars (~{len(image_b64)*3//4//1024}KB)")
         url  = f"https://vision.googleapis.com/v1/images:annotate?key={GOOGLE_VISION_KEY}"
         body = {
             "requests": [{
                 "image": {"content": image_b64},
-                "features": [{"type": "BARCODE_DETECTION", "maxResults": 5}]
+                "features": [
+                    {"type": "BARCODE_DETECTION", "maxResults": 10},
+                    {"type": "TEXT_DETECTION", "maxResults": 10},
+                ]
             }]
         }
         resp   = requests.post(url, json=body, timeout=15)
@@ -112,7 +116,13 @@ def decode_barcode_from_image(image_b64):
                 log.info(f"Google Vision decoded: {value}")
                 return value
 
-        log.info("Google Vision found no barcode")
+        # Log any text found (helps diagnose if image is arriving correctly)
+        texts = response0.get("textAnnotations", [])
+        if texts:
+            log.info(f"Text detected in image (no barcode): {texts[0].get('description', '')[:100]}")
+        else:
+            log.info("No text or barcodes detected — image may be corrupt or too small")
+
         return None
 
     except Exception as e:
