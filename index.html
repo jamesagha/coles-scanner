@@ -162,10 +162,8 @@ async function sendBarcode(barcode) {
 }
 
 document.getElementById('camera-input').addEventListener('change', async function() {
-  alert('Step 1: photo selected');
   const file = this.files && this.files[0];
-  if (!file) { alert('No file'); return; }
-  alert('Step 2: file size ' + file.size);
+  if (!file) return;
 
   showStatus('Reading photo...', 'loading');
   this.value = '';
@@ -173,12 +171,11 @@ document.getElementById('camera-input').addEventListener('change', async functio
   try {
     const base64 = await new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload  = () => { alert('Step 3: read ok length=' + reader.result.length); resolve(reader.result.split(',')[1]); };
-      reader.onerror = () => { alert('Step 3: read error'); reject(new Error('FileReader failed')); };
+      reader.onload  = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = () => reject(new Error('Could not read photo'));
       reader.readAsDataURL(file);
     });
 
-    alert('Step 4: sending to server');
     showStatus('Sending to server...', 'loading');
 
     const resp = await fetch(SERVER_URL + '/decode', {
@@ -187,19 +184,24 @@ document.getElementById('camera-input').addEventListener('change', async functio
       body: JSON.stringify({ image: base64, token: API_TOKEN })
     });
 
-    alert('Step 5: server status ' + resp.status);
     const data = await resp.json();
-    alert('Step 6: ' + JSON.stringify(data));
+
+    if (data.barcode) {
+      document.getElementById('barcode-input').value = data.barcode;
+    }
 
     if (data.success && data.barcode) {
-      document.getElementById('barcode-input').value = data.barcode;
       showStatus(data.message, 'success');
       addHistory(data.barcode, data.product, true);
+    } else if (data.barcode) {
+      // Barcode found but product not in database — still show the number
+      showStatus(data.message, 'success');
+      addHistory(data.barcode, data.barcode, false);
     } else {
-      showStatus(data.message || 'Could not find a barcode — try better lighting.', 'error');
+      // Could not read barcode at all
+      showStatus((data.message || 'Could not find a barcode — try better lighting.') + (data.barcode ? ' Barcode: ' + data.barcode : ''), 'error');
     }
   } catch(e) {
-    alert('ERROR: ' + e.message);
     showStatus('Error: ' + e.message, 'error');
   }
 });

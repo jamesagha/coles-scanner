@@ -122,6 +122,7 @@ def decode():
         if not barcode:
             return jsonify({
                 "success": False,
+                "barcode": None,
                 "message": "Could not read barcode. Try: hold phone directly above, fill the frame with the barcode, good lighting."
             })
 
@@ -131,11 +132,11 @@ def decode():
         if product_name:
             send_telegram(f"Scanned: {product_name}\nBarcode: {barcode}")
             return jsonify({"success": True, "barcode": barcode, "product": product_name,
-                            "message": f"Found: {product_name}"})
+                            "message": f"Found: {product_name} (barcode: {barcode})"})
         else:
             send_telegram(f"Scanned barcode {barcode} — product not found in database.")
             return jsonify({"success": True, "barcode": barcode, "product": None,
-                            "message": f"Barcode {barcode} scanned — not found in database"})
+                            "message": f"Barcode {barcode} scanned — product not found in database"})
 
     except Exception as e:
         log.error(f"Error in /decode: {e}", exc_info=True)
